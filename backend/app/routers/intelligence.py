@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.ml.intelligence import build_stockout_report
 from app.ml.forecasting import forecast_demand
+from app.ml.dead_stock import build_dead_stock_report
 from app.models.inventory import Product, Stock
 
 router = APIRouter(prefix="/intelligence", tags=["Intelligence"], dependencies=[Depends(get_current_user)])
@@ -25,6 +26,7 @@ def stockout_risk(warehouse_id: Optional[int] = None, db: Session = Depends(get_
         "medium_risk_count": sum(1 for r in report if r["stockout_risk"] == "MEDIUM"),
         "items": report,
     }
+
 
 @router.get("/forecast/{product_id}")
 def get_forecast(product_id: int, warehouse_id: int, horizon_days: int = 30, db: Session = Depends(get_db)):
@@ -49,3 +51,12 @@ def get_forecast(product_id: int, warehouse_id: int, horizon_days: int = 30, db:
         **result,
     }
 
+
+@router.get("/dead-stock")
+def dead_stock_report(warehouse_id: Optional[int] = None, lookback_days: int = 90, db: Session = Depends(get_db)):
+    """
+    The headline feature: classifies every product as FAST_MOVING / NORMAL /
+    SLOW_MOVING / DEAD_STOCK, quantifies the capital tied up, and recommends
+    an action (discount / transfer / stop purchasing / return to supplier).
+    """
+    return build_dead_stock_report(db, warehouse_id, lookback_days)
