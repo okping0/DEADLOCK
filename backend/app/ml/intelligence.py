@@ -109,12 +109,16 @@ def recommended_order_quantity(avg_daily_demand: float, lead_time_days: int, saf
 def build_stockout_report(db: Session, warehouse_id: int = None) -> list:
     """
     Full per-product stockout risk report. If warehouse_id is given, scoped
-    to that warehouse; otherwise runs across all stock rows.
+    to that warehouse — including active products that have NO Stock row yet
+    (e.g. just created, never stocked), which are reported at 0 quantity
+    instead of silently disappearing from the report. When warehouse_id is
+    omitted, runs across all existing stock rows only (there's no single
+    warehouse to attribute a missing product to).
     """
-    query = db.query(Stock)
-    if warehouse_id is not None:
-        query = query.filter(Stock.warehouse_id == warehouse_id)
-    stock_rows = query.all()
+    stock_rows = db.query(Stock).filter(
+        Stock.warehouse_id == warehouse_id if warehouse_id is not None else True
+    ).all()
+    stocked_product_ids = {s.product_id for s in stock_rows}
 
     report = []
     for stock in stock_rows:
@@ -140,6 +144,33 @@ def build_stockout_report(db: Session, warehouse_id: int = None) -> list:
             "stockout_risk": risk["risk_level"],
             "recommended_order_qty": reorder_qty,
         })
+
+    # include active products that have never had a Stock row created in
+    # this warehouse — they're effectively at 0 quantity, which is a
+    # legitimate (often HIGH-risk) state, not a reason to omit them
+    if warehouse_id is not None:
+        missing_products = db.query(Product).filter(
+            Product.is_active == True,  # noqa: E712
+            ~Product.id.in_(stocked_product_ids) if stocked_product_ids else True,
+        ).all()
+        for product in missing_products:
+            avg_demand = get_avg_daily_demand(db, product.id, warehouse_id)
+            lead_time = get_best_supplier_lead_time(db, product.id)
+            risk = calculate_stockout_risk(0, avg_demand, lead_time)
+            reorder_qty = recommended_order_quantity(avg_demand, lead_time, product.safety_stock, 0)
+            report.append({
+                "product_id": product.id,
+                "sku": product.sku,
+                "product_name": product.name,
+                "warehouse_id": warehouse_id,
+                "current_stock": 0,
+                "avg_daily_demand": avg_demand,
+                "avg_weekly_demand": round(avg_demand * 7, 1),
+                "lead_time_days": lead_time,
+                "days_of_stock": risk["days_of_stock"],
+                "stockout_risk": risk["risk_level"],
+                "recommended_order_qty": reorder_qty,
+            })
 
     # surface the riskiest products first
     risk_order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
