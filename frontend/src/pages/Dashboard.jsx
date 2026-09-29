@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 import { getStockoutRisk, getDeadStockReport } from "../api";
