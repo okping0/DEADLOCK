@@ -11,10 +11,14 @@ Generates:
 Run with: python seed.py
 """
 import os
+from dotenv import load_dotenv
 import random
 from datetime import datetime, timedelta, timezone
 
-os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/erp_db")
+
+load_dotenv()
+
+os.getenv("DATABASE_URL")
 
 from app.core.database import Base, engine, SessionLocal
 from app.models import inventory, sales, purchasing, user  # noqa
